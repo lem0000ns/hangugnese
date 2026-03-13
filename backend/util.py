@@ -1,19 +1,22 @@
 from googletrans import Translator
 from kiwipiepy import Kiwi
 import spacy
-import time
+import asyncio
 import re
 import json
 import joblib
 from jamo import h2j, j2hcj
+from collections.abc import AsyncIterator
+import pinyin
 
 translator = Translator()
 kiwi = Kiwi()
 nlp = spacy.load("en_core_web_sm")
 
-# SINO_KO_PATH = "sino-ko_dict.json"
-# with open(SINO_KO_PATH, "r", encoding="utf-8") as f:
-#     sino_ko_dict = json.load(f)
+SINO_KO_PATH = "sino-ko_dict.json"
+hanja_dict = {}
+with open(SINO_KO_PATH, "r", encoding="utf-8") as f:
+    hanja_dict = json.load(f)
 
 loanword_dict: dict[str, str] = {
     "컴퓨터": "computer",
@@ -100,7 +103,7 @@ loanword_dict: dict[str, str] = {
     "프린터": "printer",
 }
 
-def is_loanword(word: str) -> bool:
+def check_loanword(word: str) -> bool:
     model = joblib.load('ml/loanword_model.pkl')
     return model.predict([j2hcj(h2j(word))])[0] == 1
 
@@ -108,51 +111,56 @@ async def translate_loanword(word: str) -> str:
     result = await translator.translate(word, src="ko", dest="en")
     return result.text
 
+async def get_pinyin(word: str) -> str:
+    return pinyin.get(word)
 
-async def translate_text(english_text: str) -> str:
-    # NER before translation to korean
+
+async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, str]]:
+    """Stream translation as NDJSON-compatible dicts: each yield is {"message": segment}."""
     names: dict[str, str] = {}
-    doc = nlp(english_text)
+    doc = await asyncio.to_thread(nlp, english_text)
     for i, ent in enumerate(doc.ents):
         if ent.label_ in ["PERSON", "ORG", "GPE"]:
             placeholder = f"<NAME{i}>"
             names[placeholder] = ent.text
             english_text = english_text.replace(ent.text, placeholder)
 
-    # translate to korean (googletrans translate is async in your version)
     result = await translator.translate(english_text, src="en", dest="ko")
     korean_text = result.text
 
-    # substitute names back into the text
     for placeholder, name in names.items():
         korean_text = korean_text.replace(placeholder, name)
-    
-    token_list = kiwi.tokenize(korean_text)
-    result_chars: list[str] = []
+
+    token_list = await asyncio.to_thread(kiwi.tokenize, korean_text)
     idx = 0
 
     for t in token_list:
         surface, tag = t.form, t.tag
         start, length = t.start, t.len
         end = start + length
-
-        # Use Kiwi's positions so we never miss or mis-place a token
+        effective_start = max(start, idx)
+        if effective_start >= end:
+            idx = max(idx, end)
+            continue
         if start > idx:
-            result_chars.append(korean_text[idx:start])
-
-        replacement = surface
-        if tag in ("NNG", "NNP"):
-            if is_loanword(surface):
-                replacement = await translate_loanword(surface)
-            # elif surface in hanja_dict:
-            #     replacement = hanja_dict[surface]
-
-        result_chars.append(replacement)
-        idx = end
+            yield {"message": korean_text[idx:start], "pinyin": "", "original": ""}
+        segment = korean_text[effective_start:end]
+        is_hanja = is_loanword = False
+        if effective_start == start and tag in ("NNG", "NNP"):
+            if surface in hanja_dict:
+                is_hanja = True
+                segment = hanja_dict[surface]
+            elif check_loanword(surface):
+                is_loanword = True
+                segment = await translate_loanword(surface)
+        pinyin = await get_pinyin(segment)
+        if is_hanja:
+            yield {"message": segment, "pinyin": pinyin, "original": surface}
+        elif is_loanword:
+            yield {"message": segment, "pinyin": "", "original": surface}
+        else:
+            yield {"message": segment, "pinyin": "", "original": ""}
+        idx = max(idx, end)
 
     if idx < len(korean_text):
-        result_chars.append(korean_text[idx:])
-
-    # remove content inside parentheses
-    final_result = re.sub(r"\([^)]*\)", "", "".join(result_chars))
-    return final_result
+        yield {"message": korean_text[idx:], "pinyin": "", "original": ""}

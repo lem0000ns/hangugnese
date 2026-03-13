@@ -1,6 +1,9 @@
+import asyncio
+import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from util import translate_text
+from fastapi.responses import StreamingResponse
+from util import translate_text_stream
 
 app = FastAPI()
 
@@ -19,9 +22,14 @@ async def root():
 
 
 @app.get("/translate/{text}")
-async def translate(text: str) -> dict[str, str]:
-    try:
-        response = await translate_text(text)
-        return {"message": response}
-    except Exception as e:
-        return {"message": str(e)}
+async def translate(text: str):
+    async def ndjson_stream():
+        async for obj in translate_text_stream(text):
+            yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+            await asyncio.sleep(0.08)
+
+    return StreamingResponse(
+        ndjson_stream(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store"},
+    )

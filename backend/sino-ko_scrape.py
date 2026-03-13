@@ -11,10 +11,23 @@ chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--disable-gpu")
 
-driver = webdriver.Chrome(options=chrome_options)
-driver.get("https://en.wiktionary.org/w/index.php?title=Category:Sino-Korean_words")
+OUTPUT_PATH = "sino-ko_dict.json"
 
-kor_sino_dict: dict[str, str] = {}
+def save_progress(data: dict[str, str]) -> None:
+    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# Load existing progress so we can resume after a crash
+try:
+    with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
+        kor_sino_dict = json.load(f)
+    print(f"Resumed: {len(kor_sino_dict)} entries already in {OUTPUT_PATH}")
+except FileNotFoundError:
+    kor_sino_dict = {}
+
+driver = webdriver.Chrome(options=chrome_options)
+# driver.get("https://en.wiktionary.org/w/index.php?title=Category:Sino-Korean_words")
+driver.get("https://en.wiktionary.org/w/index.php?title=Category:Sino-Korean_words&pagefrom=%EC%B2%9C%EC%A3%BC%EA%B5%90%0A%EC%B2%9C%EC%A3%BC%EA%B5%90#mw-pages")
 
 converter = opencc.OpenCC('t2s.json')
 
@@ -28,10 +41,10 @@ def is_chinese(text: str) -> bool:
             return False
     return True
 
+words = 0
 while True:
     category_url = driver.current_url
 
-    # On the current category page, collect all (hangul, href) pairs
     start_section = driver.find_element(
         By.XPATH, "/html/body/div[3]/div/div[3]/main/div[3]/div[3]/div[2]/div[2]"
     )
@@ -44,10 +57,11 @@ while True:
             href = item.find_element(By.TAG_NAME, "a").get_attribute("href")
             page_items.append((hangul, href))
 
-    # Now visit each word's page and extract hanja
     for hangul, href in page_items:
         if hangul[0].isdigit():
             continue
+        if hangul in kor_sino_dict:
+            continue  #
         driver.get(href)
         time.sleep(1)
         try:
@@ -58,6 +72,9 @@ while True:
             simplified_hanja = converter.convert(traditional_hanja)
             print(hangul + " -> " + simplified_hanja)
             kor_sino_dict[hangul] = simplified_hanja
+            words += 1
+            if words % 50 == 0:
+                save_progress(kor_sino_dict)
         except Exception as e:
             print(e)
             continue
@@ -76,5 +93,5 @@ while True:
         print(e)
         break
 
-with open("sino-ko_dict.json", "w", encoding="utf-8") as f:
-    json.dump(kor_sino_dict, f, ensure_ascii=False, indent=2)
+save_progress(kor_sino_dict)
+print(f"Done. Saved {len(kor_sino_dict)} entries to {OUTPUT_PATH}")

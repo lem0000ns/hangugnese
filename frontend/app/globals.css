@@ -24,3 +24,51 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.result-segment-with-pinyin {
+  position: relative;
+  display: inline-block;
+}
+.result-pinyin-tooltip {
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  text-align: center;
+  pointer-events: none;
+  width: max-content;
+  max-width: 12em;
+}
+.result-pinyin-tooltip-portal {
+  z-index: 9999;
+  visibility: visible;
+  opacity: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.result-tooltip-original {
+  display: inline;
+  font-weight: 500;
+}
+.result-tooltip-pinyin {
+  display: inline;
+  opacity: 0.9;
+}
+.result-tooltip-original + .result-tooltip-pinyin::before {
+  content: " · ";
+  opacity: 0.8;
+}
+
+.result-segment-hanja {
+  text-shadow:
+    0 0 2px rgba(250, 204, 21, 0.8),
+    0 0 4px rgba(250, 204, 21, 0.5),
+    0 0 6px rgba(250, 204, 21, 0.3);
+}
+.result-segment-loanword {
+  text-shadow:
+    0 0 2px rgba(239, 68, 68, 0.8),
+    0 0 4px rgba(239, 68, 68, 0.5),
+    0 0 6px rgba(239, 68, 68, 0.3);
+}
