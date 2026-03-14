@@ -8,12 +8,19 @@ type HelloResponse = { message: string; pinyin?: string; original?: string };
 
 type TooltipState = { index: number; left: number; top: number } | null;
 
+type VerbosityLevel = "modest" | "adequate" | "rich";
+
 export default function Home() {
   const [text, setText] = useState("");
   const [result, setResult] = useState<Segment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState>(null);
+  const [generatePrompt, setGeneratePrompt] = useState("");
+  const [generateSectionOpen, setGenerateSectionOpen] = useState(false);
+  const [verbosity, setVerbosity] = useState<VerbosityLevel>("adequate");
+  const [temperature, setTemperature] = useState(0.7);
+  const [generateLoading, setGenerateLoading] = useState(false);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -26,7 +33,7 @@ export default function Home() {
 
     try {
       const res = await fetch(
-        `http://localhost:8000/translate/${encodeURIComponent(value)}`
+        `http://localhost:8000/translate/${encodeURIComponent(value)}`,
       );
 
       if (!res.ok) {
@@ -94,13 +101,35 @@ export default function Home() {
                   original: data.original ?? "",
                 },
               ]
-            : []
+            : [],
         );
       }
     } catch {
       setError("Could not reach backend");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerate = async () => {
+    setGenerateLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (generatePrompt.trim()) params.set("prompt", generatePrompt.trim());
+      params.set("temperature", String(temperature));
+      params.set("verbosity", verbosity);
+      const res = await fetch(`http://localhost:8000/generate?${params}`);
+      if (!res.ok) {
+        setError(`Generate failed: ${res.status}`);
+        return;
+      }
+      const data = (await res.json()) as { text?: string };
+      if (data.text != null) setText(data.text);
+    } catch {
+      setError("Could not reach backend");
+    } finally {
+      setGenerateLoading(false);
     }
   };
 
@@ -133,13 +162,150 @@ export default function Home() {
             fontSize: "clamp(1.25rem, 2.5vw, 1.5rem)",
             fontWeight: 600,
             letterSpacing: "0.04em",
-            marginBottom: "clamp(1.5rem, 4vw, 2.5rem)",
+            marginBottom: "clamp(1rem, 3vw, 1.5rem)",
             color: "#9ca3af",
           }}
         >
-          Harvest your craft
+          Forge a Verse
         </h1>
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+        <div
+          style={{
+            marginBottom: "clamp(1rem, 3vw, 1.5rem)",
+            borderRadius: "10px",
+            background: "#252a30",
+            border: "1px solid #3d444d",
+            overflow: "hidden",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setGenerateSectionOpen((o) => !o)}
+            style={{
+              width: "100%",
+              padding: "0.6rem 1rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              border: "none",
+              background: "transparent",
+              color: "#9ca3af",
+              fontSize: "0.9rem",
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            <span>Generate options (optional)</span>
+            <span style={{ fontSize: "0.7rem" }}>
+              {generateSectionOpen ? "▲" : "▼"}
+            </span>
+          </button>
+          {generateSectionOpen && (
+            <div
+              style={{
+                padding: "0 1rem 0.75rem 1rem",
+                borderTop: "1px solid #3d444d",
+              }}
+            >
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  color: "#9ca3af",
+                  marginBottom: "0.35rem",
+                  marginTop: "0.5rem",
+                }}
+              >
+                Prompt (optional)
+              </label>
+              <input
+                type="text"
+                value={generatePrompt}
+                onChange={(e) => setGeneratePrompt(e.target.value)}
+                placeholder="e.g. Harry Potter ends up teaming up with Voldemort"
+                style={{
+                  width: "100%",
+                  padding: "0.5rem 0.6rem",
+                  borderRadius: "6px",
+                  border: "1px solid #3d444d",
+                  background: "#1e2226",
+                  color: "#e5e7eb",
+                  fontSize: "0.9rem",
+                  marginBottom: "0.75rem",
+                }}
+              />
+              <div style={{ marginBottom: "0.6rem" }}>
+                <span
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "#9ca3af",
+                    marginRight: "0.5rem",
+                  }}
+                >
+                  Verbosity
+                </span>
+                {(["modest", "adequate", "rich"] as const).map((v) => (
+                  <label
+                    key={v}
+                    style={{
+                      marginRight: "0.75rem",
+                      fontSize: "0.85rem",
+                      color: "#c8cdd2",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="verbosity"
+                      checked={verbosity === v}
+                      onChange={() => setVerbosity(v)}
+                      style={{ marginRight: "0.25rem" }}
+                    />
+                    {v}
+                  </label>
+                ))}
+              </div>
+              <div style={{ marginBottom: "0.75rem" }}>
+                <label style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                  Temperature: {temperature.toFixed(1)}
+                </label>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1}
+                  step={0.1}
+                  value={temperature}
+                  onChange={(e) => setTemperature(Number(e.target.value))}
+                  style={{ width: "100%", marginTop: "0.25rem" }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generateLoading}
+                style={{
+                  padding: "0.45rem 1rem",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "#4b5563",
+                  color: "#e5e7eb",
+                  fontSize: "0.85rem",
+                  cursor: generateLoading ? "not-allowed" : "pointer",
+                  opacity: generateLoading ? 0.7 : 1,
+                }}
+              >
+                {generateLoading ? "Generating…" : "Generate"}
+              </button>
+            </div>
+          )}
+        </div>
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+          }}
+        >
           <div
             style={{
               display: "flex",
@@ -210,7 +376,8 @@ export default function Home() {
       <div
         style={{
           width: "1px",
-          background: "linear-gradient(180deg, transparent, rgba(139, 92, 246, 0.4), transparent)",
+          background:
+            "linear-gradient(180deg, transparent, rgba(139, 92, 246, 0.4), transparent)",
           flexShrink: 0,
         }}
       />
@@ -220,7 +387,8 @@ export default function Home() {
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 35%, #4c1d95 70%, #831843 100%)",
+          background:
+            "linear-gradient(135deg, #1e1b4b 0%, #312e81 35%, #4c1d95 70%, #831843 100%)",
           color: "#f3e8ff",
           padding: "clamp(1.5rem, 4vw, 3rem)",
           minWidth: 0,
@@ -232,7 +400,7 @@ export default function Home() {
             fontSize: "clamp(1.25rem, 2.5vw, 1.5rem)",
             fontWeight: 600,
             letterSpacing: "0.04em",
-            marginBottom: "clamp(1.5rem, 4vw, 2.5rem)",
+            marginBottom: "clamp(1rem, 3vw, 1.5rem)",
             color: "rgba(243, 232, 255, 0.95)",
           }}
         >
@@ -240,8 +408,10 @@ export default function Home() {
         </h2>
         <div
           style={{
+            flex: 1,
+            minHeight: 0,
             height: boxHeight,
-            minHeight: boxHeight,
+            maxHeight: boxHeight,
             borderRadius: "12px",
             border: "1px solid rgba(192, 132, 252, 0.25)",
             background: "rgba(30, 27, 75, 0.5)",
@@ -270,7 +440,7 @@ export default function Home() {
                 return hasTooltip ? (
                   <span
                     key={i}
-                    className={`result-segment-with-pinyin ${auraClass}`.trim()}
+                    className={`result-segment-with-pinyin result-segment-stream-in ${auraClass}`.trim()}
                     onMouseEnter={(e) => {
                       const rect = e.currentTarget.getBoundingClientRect();
                       setTooltip({
@@ -284,7 +454,9 @@ export default function Home() {
                     {seg.message}
                   </span>
                 ) : (
-                  <span key={i}>{seg.message}</span>
+                  <span key={i} className="result-segment-stream-in">
+                    {seg.message}
+                  </span>
                 );
               })}
             </p>
@@ -316,13 +488,17 @@ export default function Home() {
             aria-hidden
           >
             {result[tooltip.index].original ? (
-              <span className="result-tooltip-original">{result[tooltip.index].original}</span>
+              <span className="result-tooltip-original">
+                {result[tooltip.index].original}
+              </span>
             ) : null}
             {result[tooltip.index].pinyin ? (
-              <span className="result-tooltip-pinyin">{result[tooltip.index].pinyin}</span>
+              <span className="result-tooltip-pinyin">
+                {result[tooltip.index].pinyin}
+              </span>
             ) : null}
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

@@ -60,6 +60,18 @@ body {
   opacity: 0.8;
 }
 
+.result-segment-stream-in {
+  animation: result-stream-in 0.28s ease-out;
+}
+@keyframes result-stream-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .result-segment-hanja {
   text-shadow:
     0 0 2px rgba(250, 204, 21, 0.8),

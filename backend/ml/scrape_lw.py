@@ -20,6 +20,8 @@ def load_existing_words() -> set[str]:
     except FileNotFoundError:
         return set()
 
+def contains_digit(text: str) -> bool:
+    return any(char.isdigit() for char in text)
 
 def append_to_csv(words: list[str], label: int = 1) -> None:
     with open(CSV_PATH, "a", encoding="utf-8", newline="") as f:
@@ -32,7 +34,7 @@ existing = load_existing_words()
 loanwords: list[str] = []
 
 driver = webdriver.Chrome(options=chrome_options)
-driver.get("https://en.wiktionary.org/wiki/Category:Korean_terms_borrowed_from_English")
+driver.get("https://en.wiktionary.org/w/index.php?title=Category:Korean_terms_borrowed_from_English&pagefrom=%EB%8B%A4%ED%81%AC%EC%84%9C%ED%81%B4%0A%EB%8B%A4%ED%81%AC%EC%84%9C%ED%81%B4#mw-pages")
 
 words = 0
 while True:
@@ -46,10 +48,11 @@ while True:
     for group in groups:
         for item in group.find_elements(By.TAG_NAME, "li"):
             hangul = item.text
-            if hangul[0].isdigit():
+            if contains_digit(hangul):
                 continue
             if hangul in existing or hangul in loanwords:
                 continue
+            print(hangul)
             loanwords.append(hangul)
             words += 1
 
@@ -59,7 +62,7 @@ while True:
     try:
         next_link = driver.find_element(
             By.XPATH,
-            "//a[@title='Category:Sino-Korean words' and contains(normalize-space(.), 'next page')]",
+            "//*[@id=\"mw-pages\"]/a[2]",
         )
         next_link.click()
         time.sleep(1)

@@ -8,6 +8,9 @@ import joblib
 from jamo import h2j, j2hcj
 from collections.abc import AsyncIterator
 import pinyin
+import opencc
+
+converter = opencc.OpenCC('t2s.json')
 
 translator = Translator()
 kiwi = Kiwi()
@@ -103,17 +106,20 @@ loanword_dict: dict[str, str] = {
     "프린터": "printer",
 }
 
+def simplified(hanja: str) -> str:
+    return converter.convert(hanja)
+
 def check_loanword(word: str) -> bool:
     model = joblib.load('ml/loanword_model.pkl')
-    return model.predict([j2hcj(h2j(word))])[0] == 1
+    confidence = model.predict_proba([j2hcj(h2j(word))])[0][1]
+    return confidence > 0.6 # only accept with high confidence to prevent false positives (loanwords should be high confidence)
 
 async def translate_loanword(word: str) -> str:
-    result = await translator.translate(word, src="ko", dest="en")
+    result = await translator.translate(word, src="ko", dest="es")
     return result.text
 
 async def get_pinyin(word: str) -> str:
     return pinyin.get(word)
-
 
 async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, str]]:
     """Stream translation as NDJSON-compatible dicts: each yield is {"message": segment}."""
@@ -149,7 +155,7 @@ async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, st
         if effective_start == start and tag in ("NNG", "NNP"):
             if surface in hanja_dict:
                 is_hanja = True
-                segment = hanja_dict[surface]
+                segment = simplified(hanja_dict[surface])
             elif check_loanword(surface):
                 is_loanword = True
                 segment = await translate_loanword(surface)
@@ -157,7 +163,7 @@ async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, st
         if is_hanja:
             yield {"message": segment, "pinyin": pinyin, "original": surface}
         elif is_loanword:
-            yield {"message": segment, "pinyin": "", "original": surface}
+            yield {"message": segment.upper(), "pinyin": "", "original": surface}
         else:
             yield {"message": segment, "pinyin": "", "original": ""}
         idx = max(idx, end)
