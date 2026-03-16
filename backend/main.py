@@ -11,7 +11,10 @@ from enum import Enum
 
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise RuntimeError("OPENAI_API_KEY not set in environment")
+client = OpenAI(api_key=api_key)
 
 app = FastAPI()
 
@@ -84,9 +87,3 @@ async def generate(
     )
     text = response.choices[0].message.content or ""
     return {"text": text}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
