@@ -15,6 +15,7 @@ converter = opencc.OpenCC('t2s.json')
 translator = Translator()
 kiwi = Kiwi()
 nlp = spacy.load("en_core_web_sm")
+model = joblib.load('ml/loanword_model.pkl')
 
 SINO_KO_PATH = "sino-ko_dict.json"
 hanja_dict = {}
@@ -110,7 +111,6 @@ def simplified(hanja: str) -> str:
     return converter.convert(hanja)
 
 def check_loanword(word: str) -> bool:
-    model = joblib.load('ml/loanword_model.pkl')
     confidence = model.predict_proba([j2hcj(h2j(word))])[0][1]
     return confidence > 0.6 # only accept with high confidence to prevent false positives (loanwords should be high confidence)
 
