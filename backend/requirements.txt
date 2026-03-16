@@ -9,6 +9,7 @@ googletrans>=4.0.2
 kiwipiepy>=0.22.0
 spacy>=3.8.0,<4.0    # SpaCy 3.x works with Pydantic 1.x
 joblib>=1.5.0
+scikit-learn>=1.5.2
 jamo>=0.4.1
 pinyin>=0.4.0
 OpenCC>=1.2.0
