@@ -3,7 +3,6 @@ fastapi>=0.135.0
 uvicorn>=0.41.0
 openai>=2.28.0
 python-dotenv>=1.2.0
-pydantic<2.0         
 
 # util.py
 googletrans>=4.0.2
