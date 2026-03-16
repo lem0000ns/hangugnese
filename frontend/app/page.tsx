@@ -34,7 +34,7 @@ export default function Home() {
 
     try {
       const res = await fetch(
-        `http://localhost:8000/translate/${encodeURIComponent(value)}`,
+        `https://hangugnese.onrender.com/translate/${encodeURIComponent(value)}`,
       );
 
       if (!res.ok) {
@@ -120,7 +120,7 @@ export default function Home() {
       if (generatePrompt.trim()) params.set("prompt", generatePrompt.trim());
       params.set("temperature", String(temperature));
       params.set("verbosity", verbosity);
-      const res = await fetch(`http://localhost:8000/generate?${params}`);
+      const res = await fetch(`https://hangugnese.onrender.com/generate?${params}`);
       if (!res.ok) {
         setError(`Generate failed: ${res.status}`);
         return;
