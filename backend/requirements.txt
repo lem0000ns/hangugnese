@@ -41,8 +41,6 @@ lxml==6.0.2
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
-mecab==0.996.13
-mecab-python3==1.0.12
 murmurhash==1.0.15
 nltk==3.9.3
 numpy==2.4.3

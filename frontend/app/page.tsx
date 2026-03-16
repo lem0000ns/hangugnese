@@ -30,7 +30,7 @@ export default function Home() {
 
     setLoading(true);
     setError(null);
-    setResult("");
+    setResult([]);
 
     try {
       const res = await fetch(
