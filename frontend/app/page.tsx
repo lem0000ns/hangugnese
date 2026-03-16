@@ -21,6 +21,7 @@ export default function Home() {
   const [verbosity, setVerbosity] = useState<VerbosityLevel>("adequate");
   const [temperature, setTemperature] = useState(0.7);
   const [generateLoading, setGenerateLoading] = useState(false);
+  const [helpModalOpen, setHelpModalOpen] = useState(false);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -387,6 +388,7 @@ export default function Home() {
           flex: 1,
           display: "flex",
           flexDirection: "column",
+          position: "relative",
           background:
             "linear-gradient(135deg, #1e1b4b 0%, #312e81 35%, #4c1d95 70%, #831843 100%)",
           color: "#f3e8ff",
@@ -394,6 +396,30 @@ export default function Home() {
           minWidth: 0,
         }}
       >
+        <button
+          type="button"
+          onClick={() => setHelpModalOpen(true)}
+          aria-label="How to use"
+          style={{
+            position: "absolute",
+            top: "clamp(1rem, 2.5vw, 1.25rem)",
+            right: "clamp(1rem, 2.5vw, 1.25rem)",
+            width: "28px",
+            height: "28px",
+            borderRadius: "50%",
+            border: "1px solid rgba(192, 132, 252, 0.4)",
+            background: "rgba(30, 27, 75, 0.6)",
+            color: "rgba(243, 232, 255, 0.9)",
+            fontSize: "0.9rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          ?
+        </button>
         <h2
           style={{
             fontFamily: "var(--font-cinzel), serif",
@@ -497,6 +523,131 @@ export default function Home() {
                 {result[tooltip.index].pinyin}
               </span>
             ) : null}
+          </div>,
+          document.body,
+        )}
+
+      {helpModalOpen &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="help-modal-title"
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 10000,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "1.5rem",
+              background: "rgba(0, 0, 0, 0.6)",
+            }}
+            onClick={() => setHelpModalOpen(false)}
+          >
+            <div
+              style={{
+                background: "linear-gradient(180deg, #1e1b4b 0%, #312e81 100%)",
+                color: "#f3e8ff",
+                borderRadius: "14px",
+                border: "1px solid rgba(192, 132, 252, 0.35)",
+                maxWidth: "520px",
+                width: "100%",
+                maxHeight: "85vh",
+                overflow: "auto",
+                padding: "1.75rem 2rem",
+                boxShadow: "0 24px 64px rgba(0,0,0,0.45)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  marginBottom: "1.25rem",
+                }}
+              >
+                <h3
+                  id="help-modal-title"
+                  style={{
+                    margin: 0,
+                    fontFamily: "var(--font-cinzel), serif",
+                    fontSize: "1.4rem",
+                    fontWeight: 600,
+                    letterSpacing: "0.03em",
+                  }}
+                >
+                  How to use
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setHelpModalOpen(false)}
+                  aria-label="Close"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "rgba(243, 232, 255, 0.8)",
+                    fontSize: "1.5rem",
+                    cursor: "pointer",
+                    lineHeight: 1,
+                    padding: "0 0.25rem",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              <div
+                style={{
+                  fontSize: "1.05rem",
+                  lineHeight: 1.85,
+                  letterSpacing: "0.01em",
+                  color: "rgba(243, 232, 255, 0.95)",
+                }}
+              >
+                <p style={{ margin: "0 0 1.1rem" }}>
+                  <strong
+                    style={{
+                      color: "rgba(216, 180, 254, 1)",
+                      fontWeight: 600,
+                      fontSize: "1.02em",
+                    }}
+                  >
+                    Translate:
+                  </strong>{" "}
+                  Type or paste English text in the left box, then click
+                  Translate. The Korean translation appears on the right, with
+                  loanwords and hanja highlighted.
+                </p>
+                <p style={{ margin: "0 0 1.1rem" }}>
+                  <strong
+                    style={{
+                      color: "rgba(216, 180, 254, 1)",
+                      fontWeight: 600,
+                      fontSize: "1.02em",
+                    }}
+                  >
+                    Generate text:
+                  </strong>{" "}
+                  Open “Generate options (optional)” on the left. Enter a prompt,
+                  choose verbosity and temperature, then click Generate. The
+                  result fills the left text box so you can translate it.
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong
+                    style={{
+                      color: "rgba(216, 180, 254, 1)",
+                      fontWeight: 600,
+                      fontSize: "1.02em",
+                    }}
+                  >
+                    Result panel:
+                  </strong>{" "}
+                  Hover over yellow-glowing (hanja) or red-glowing (loanword)
+                  words to see the original Korean and pinyin in a tooltip.
+                </p>
+              </div>
+            </div>
           </div>,
           document.body,
         )}
