@@ -123,51 +123,50 @@ async def get_pinyin(word: str) -> str:
 
 async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, str]]:
     """Stream translation as NDJSON-compatible dicts: each yield is {"message": segment}."""
-    yield {"message": english_text}
-    # names: dict[str, str] = {}
-    # doc = await asyncio.to_thread(nlp, english_text)
-    # for i, ent in enumerate(doc.ents):
-    #     if ent.label_ in ["PERSON", "ORG", "GPE"]:
-    #         placeholder = f"<NAME{i}>"
-    #         names[placeholder] = ent.text
-    #         english_text = english_text.replace(ent.text, placeholder)
+    names: dict[str, str] = {}
+    doc = await asyncio.to_thread(nlp, english_text)
+    for i, ent in enumerate(doc.ents):
+        if ent.label_ in ["PERSON", "ORG", "GPE"]:
+            placeholder = f"<NAME{i}>"
+            names[placeholder] = ent.text
+            english_text = english_text.replace(ent.text, placeholder)
 
-    # result = await translator.translate(english_text, src="en", dest="ko")
-    # korean_text = result.text
+    result = await translator.translate(english_text, src="en", dest="ko")
+    korean_text = result.text
 
-    # for placeholder, name in names.items():
-    #     korean_text = korean_text.replace(placeholder, name)
+    for placeholder, name in names.items():
+        korean_text = korean_text.replace(placeholder, name)
 
-    # token_list = await asyncio.to_thread(kiwi.tokenize, korean_text)
-    # idx = 0
+    token_list = await asyncio.to_thread(kiwi.tokenize, korean_text)
+    idx = 0
 
-    # for t in token_list:
-    #     surface, tag = t.form, t.tag
-    #     start, length = t.start, t.len
-    #     end = start + length
-    #     effective_start = max(start, idx)
-    #     if effective_start >= end:
-    #         idx = max(idx, end)
-    #         continue
-    #     if start > idx:
-    #         yield {"message": korean_text[idx:start], "pinyin": "", "original": ""}
-    #     segment = korean_text[effective_start:end]
-    #     is_hanja = is_loanword = False
-    #     if effective_start == start and tag in ("NNG", "NNP"):
-    #         if surface in hanja_dict:
-    #             is_hanja = True
-    #             segment = simplified(hanja_dict[surface])
-    #         elif check_loanword(surface):
-    #             is_loanword = True
-    #             segment = await translate_loanword(surface)
-    #     pinyin = await get_pinyin(segment)
-    #     if is_hanja:
-    #         yield {"message": segment, "pinyin": pinyin, "original": surface}
-    #     elif is_loanword:
-    #         yield {"message": segment.upper(), "pinyin": "", "original": surface}
-    #     else:
-    #         yield {"message": segment, "pinyin": "", "original": ""}
-    #     idx = max(idx, end)
+    for t in token_list:
+        surface, tag = t.form, t.tag
+        start, length = t.start, t.len
+        end = start + length
+        effective_start = max(start, idx)
+        if effective_start >= end:
+            idx = max(idx, end)
+            continue
+        if start > idx:
+            yield {"message": korean_text[idx:start], "pinyin": "", "original": ""}
+        segment = korean_text[effective_start:end]
+        is_hanja = is_loanword = False
+        # if effective_start == start and tag in ("NNG", "NNP"):
+            # if surface in hanja_dict:
+            #     is_hanja = True
+            #     segment = simplified(hanja_dict[surface])
+            # elif check_loanword(surface):
+            #     is_loanword = True
+            #     segment = await translate_loanword(surface)
+        if is_hanja:
+            pinyin = await get_pinyin(segment)
+            yield {"message": segment, "pinyin": pinyin, "original": surface}
+        elif is_loanword:
+            yield {"message": segment.upper(), "pinyin": "", "original": surface}
+        else:
+            yield {"message": segment, "pinyin": "", "original": ""}
+        idx = max(idx, end)
 
-    # if idx < len(korean_text):
-    #     yield {"message": korean_text[idx:], "pinyin": "", "original": ""}
+    if idx < len(korean_text):
+        yield {"message": korean_text[idx:], "pinyin": "", "original": ""}

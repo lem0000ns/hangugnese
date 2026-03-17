@@ -75,7 +75,7 @@ async def generate(
         max_sentences = 4
         vocab_description = "level appropriate for a high school student"
 
-    system_prompt = f"Generate about {max_sentences} sentences about the given topic. Keep the vocabulary {vocab_description}. Do not include line breaks."
+    system_prompt = f"Generate about {max_sentences} sentences about the given topic. Keep the vocabulary {vocab_description}. Do not include line breaks. If the topic is inappropriate, generate about {max_sentences} sentences about the dangers of the topic."
     if prompt is None:
         prompt = "Anything you want."
 
