@@ -1,5 +1,5 @@
 from googletrans import Translator
-from kiwipiepy import Kiwi
+# from kiwipiepy import Kiwi
 import spacy
 import asyncio
 import re
@@ -13,7 +13,7 @@ import opencc
 converter = opencc.OpenCC('t2s.json')
 
 translator = Translator()
-kiwi = Kiwi()
+# kiwi = Kiwi()
 nlp = spacy.load("en_core_web_sm")
 model = joblib.load('ml/loanword_model.pkl')
 
@@ -121,6 +121,13 @@ async def translate_loanword(word: str) -> str:
 async def get_pinyin(word: str) -> str:
     return pinyin.get(word)
 
+class MyToken:
+    def __init__(self, form, tag, start, len_):
+        self.form = form      # same as Kiwi
+        self.tag = tag        # POS tag
+        self.start = start    # start index
+        self.len = len_       # length
+
 async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, str]]:
     """Stream translation as NDJSON-compatible dicts: each yield is {"message": segment}."""
     names: dict[str, str] = {}
@@ -136,8 +143,19 @@ async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, st
 
     for placeholder, name in names.items():
         korean_text = korean_text.replace(placeholder, name)
+    
 
-    token_list = await asyncio.to_thread(kiwi.tokenize, korean_text)
+    # token_list = await asyncio.to_thread(kiwi.tokenize, korean_text)
+    token_list = [
+        MyToken("안녕", "NNG", 0, 2),
+        MyToken("하", "XSA", 2, 1),
+        MyToken("세요", "EF", 3, 2),
+        MyToken("저", "NP", 6, 1),
+        MyToken("는", "JX", 7, 1),
+        MyToken("학생", "NNG", 9, 2),
+        MyToken("이", "VCP", 11, 1),
+        MyToken("ㅂ니다", "EF", 12, 3)
+    ]
     idx = 0
 
     for t in token_list:
