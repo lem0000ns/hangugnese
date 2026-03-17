@@ -150,6 +150,10 @@ export default function Home() {
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
         overflow: "hidden",
       }}
+      onClick={() => {
+        setTooltip(null);
+        setTooltipDefinition(null);
+      }}
     >
       <section
         style={{
@@ -485,7 +489,8 @@ export default function Home() {
                     onMouseLeave={() => setTooltip(null)}
                     onClick={
                       isHanja
-                        ? async () => {
+                        ? async (e) => {
+                            e.stopPropagation();
                             const token = seg.message; // simplified Chinese
                             if (!token.trim()) return;
                             setTooltipLoading(true);
@@ -519,6 +524,7 @@ export default function Home() {
                     key={i}
                     className="result-segment-stream-in result-hoverable-token"
                     onClick={async (e) => {
+                      e.stopPropagation();
                       const token = seg.message;
                       if (!token.trim()) return;
                       const rect = e.currentTarget.getBoundingClientRect();
@@ -585,6 +591,9 @@ export default function Home() {
               transition: "opacity 0.15s ease, transform 0.15s ease",
             }}
             aria-hidden
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
           >
             {result[tooltip.index].original ? (
               <span className="result-tooltip-original">
