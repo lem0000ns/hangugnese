@@ -1,5 +1,4 @@
 from googletrans import Translator
-# from kiwipiepy import Kiwi
 import spacy
 import asyncio
 import re
@@ -10,12 +9,11 @@ from collections.abc import AsyncIterator
 import pinyin
 import opencc
 
-converter = opencc.OpenCC('t2s.json')
+converter = opencc.OpenCC("t2s.json")
 
 translator = Translator()
-# kiwi = Kiwi()
 nlp = spacy.load("en_core_web_sm")
-model = joblib.load('ml/loanword_model.pkl')
+model = joblib.load("ml/loanword_model.pkl")
 
 SINO_KO_PATH = "sino-ko_dict.json"
 hanja_dict = {}
@@ -121,12 +119,12 @@ async def translate_loanword(word: str) -> str:
 async def get_pinyin(word: str) -> str:
     return pinyin.get(word)
 
-class MyToken:
-    def __init__(self, form, tag, start, len_):
-        self.form = form      # same as Kiwi
-        self.tag = tag        # POS tag
-        self.start = start    # start index
-        self.len = len_       # length
+
+async def get_english_definition(word: str, kind: str = "ko") -> str:
+    """Lookup a word's English meaning on demand for tooltips."""
+    src = "zh-CN" if kind == "hanja" else "ko"
+    result = await translator.translate(word, src=src, dest="en")
+    return result.text
 
 async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, str]]:
     """Stream translation as NDJSON-compatible dicts: each yield is {"message": segment}."""
@@ -143,48 +141,36 @@ async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, st
 
     for placeholder, name in names.items():
         korean_text = korean_text.replace(placeholder, name)
-    
 
-    # token_list = await asyncio.to_thread(kiwi.tokenize, korean_text)
-    token_list = [
-        MyToken("안녕", "NNG", 0, 2),
-        MyToken("하", "XSA", 2, 1),
-        MyToken("세요", "EF", 3, 2),
-        MyToken("저", "NP", 6, 1),
-        MyToken("는", "JX", 7, 1),
-        MyToken("학생", "NNG", 9, 2),
-        MyToken("이", "VCP", 11, 1),
-        MyToken("ㅂ니다", "EF", 12, 3)
-    ]
+    # Simple regex tokenizer: contiguous non-space runs, keep gaps as-is.
     idx = 0
+    for m in re.finditer(r"\S+", korean_text):
+        start, end = m.span()
+        surface = m.group(0)
 
-    for t in token_list:
-        surface, tag = t.form, t.tag
-        start, length = t.start, t.len
-        end = start + length
-        effective_start = max(start, idx)
-        if effective_start >= end:
-            idx = max(idx, end)
-            continue
         if start > idx:
+            # gap (spaces / punctuation) before this token
             yield {"message": korean_text[idx:start], "pinyin": "", "original": ""}
-        segment = korean_text[effective_start:end]
+
+        segment = surface
         is_hanja = is_loanword = False
-        # if effective_start == start and tag in ("NNG", "NNP"):
-            # if surface in hanja_dict:
-            #     is_hanja = True
-            #     segment = simplified(hanja_dict[surface])
-            # elif check_loanword(surface):
-            #     is_loanword = True
-            #     segment = await translate_loanword(surface)
+
+        if surface in hanja_dict:
+            is_hanja = True
+            segment = simplified(hanja_dict[surface])
+        elif check_loanword(surface):
+            is_loanword = True
+            segment = await translate_loanword(surface)
+
         if is_hanja:
-            pinyin = await get_pinyin(segment)
-            yield {"message": segment, "pinyin": pinyin, "original": surface}
+            pinyin_text = await get_pinyin(segment)
+            yield {"message": segment, "pinyin": pinyin_text, "original": surface}
         elif is_loanword:
             yield {"message": segment.upper(), "pinyin": "", "original": surface}
         else:
             yield {"message": segment, "pinyin": "", "original": ""}
-        idx = max(idx, end)
+
+        idx = end
 
     if idx < len(korean_text):
         yield {"message": korean_text[idx:], "pinyin": "", "original": ""}

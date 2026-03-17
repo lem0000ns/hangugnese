@@ -3,7 +3,7 @@ import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from util import translate_text_stream
+from util import translate_text_stream, get_english_definition
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
@@ -88,3 +88,13 @@ async def generate(
     )
     text = response.choices[0].message.content or ""
     return {"text": text}
+
+
+@app.get("/define")
+async def define(word: str, kind: str = "ko"):
+    """Return an on-demand English definition for a token.
+
+    kind = "ko" for Korean, "hanja" for Chinese (simplified) input.
+    """
+    definition = await get_english_definition(word, kind=kind)
+    return {"definition": definition}

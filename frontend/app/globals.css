@@ -84,3 +84,18 @@ body {
     0 0 4px rgba(239, 68, 68, 0.5),
     0 0 6px rgba(239, 68, 68, 0.3);
 }
+
+.result-hoverable-token {
+  cursor: pointer !important;
+  margin-right: 0.12em;
+  transition:
+    transform 0.15s ease,
+    text-shadow 0.15s ease;
+}
+
+.result-hoverable-token:hover {
+  transform: translateY(-1px);
+  text-shadow:
+    0 0 3px rgba(248, 250, 252, 0.7),
+    0 0 6px rgba(129, 140, 248, 0.6);
+}

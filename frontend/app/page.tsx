@@ -22,6 +22,10 @@ export default function Home() {
   const [temperature, setTemperature] = useState(0.7);
   const [generateLoading, setGenerateLoading] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [tooltipDefinition, setTooltipDefinition] = useState<string | null>(
+    null,
+  );
+  const [tooltipLoading, setTooltipLoading] = useState(false);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -432,7 +436,7 @@ export default function Home() {
             color: "rgba(243, 232, 255, 0.95)",
           }}
         >
-          Reap the beauty
+          Reap the jamo
         </h2>
         <div
           style={{
@@ -468,7 +472,7 @@ export default function Home() {
                 return hasTooltip ? (
                   <span
                     key={i}
-                    className={`result-segment-with-pinyin result-segment-stream-in ${auraClass}`.trim()}
+                    className={`result-segment-with-pinyin result-segment-stream-in result-hoverable-token ${auraClass}`.trim()}
                     onMouseEnter={(e) => {
                       const rect = e.currentTarget.getBoundingClientRect();
                       setTooltip({
@@ -476,13 +480,75 @@ export default function Home() {
                         left: rect.left + rect.width / 2,
                         top: rect.top,
                       });
+                      setTooltipDefinition(null);
                     }}
                     onMouseLeave={() => setTooltip(null)}
+                    onClick={
+                      isHanja
+                        ? async () => {
+                            const token = seg.message; // simplified Chinese
+                            if (!token.trim()) return;
+                            setTooltipLoading(true);
+                            setTooltipDefinition(null);
+                            try {
+                              const res = await fetch(
+                                `https://hangugnese.onrender.com/define?word=${encodeURIComponent(
+                                  token,
+                                )}&kind=hanja`,
+                              );
+                              if (!res.ok) return;
+                              const data = (await res.json()) as {
+                                definition?: string;
+                              };
+                              if (data.definition) {
+                                setTooltipDefinition(data.definition);
+                              }
+                            } catch {
+                              // ignore errors for tooltip lookup
+                            } finally {
+                              setTooltipLoading(false);
+                            }
+                          }
+                        : undefined
+                    }
                   >
                     {seg.message}
                   </span>
                 ) : (
-                  <span key={i} className="result-segment-stream-in">
+                  <span
+                    key={i}
+                    className="result-segment-stream-in result-hoverable-token"
+                    onClick={async (e) => {
+                      const token = seg.message;
+                      if (!token.trim()) return;
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setTooltip({
+                        index: i,
+                        left: rect.left + rect.width / 2,
+                        top: rect.top,
+                      });
+                      setTooltipLoading(true);
+                      setTooltipDefinition(null);
+                      try {
+                        const res = await fetch(
+                          `https://hangugnese.onrender.com/define?word=${encodeURIComponent(
+                            token,
+                          )}&kind=ko`,
+                        );
+                        if (!res.ok) return;
+                        const data = (await res.json()) as {
+                          definition?: string;
+                        };
+                        if (data.definition) {
+                          setTooltipDefinition(data.definition);
+                        }
+                      } catch {
+                        // ignore errors for tooltip lookup
+                      } finally {
+                        setTooltipLoading(false);
+                      }
+                    }}
+                  >
                     {seg.message}
                   </span>
                 );
@@ -504,6 +570,10 @@ export default function Home() {
       </section>
       {tooltip != null &&
         result[tooltip.index] &&
+        (result[tooltip.index].original ||
+          result[tooltip.index].pinyin ||
+          tooltipLoading ||
+          tooltipDefinition) &&
         createPortal(
           <div
             className="result-pinyin-tooltip result-pinyin-tooltip-portal"
@@ -512,6 +582,7 @@ export default function Home() {
               left: tooltip.left,
               top: tooltip.top,
               transform: "translate(-50%, -100%) translateY(-6px)",
+              transition: "opacity 0.15s ease, transform 0.15s ease",
             }}
             aria-hidden
           >
@@ -523,6 +594,29 @@ export default function Home() {
             {result[tooltip.index].pinyin ? (
               <span className="result-tooltip-pinyin">
                 {result[tooltip.index].pinyin}
+              </span>
+            ) : null}
+            {tooltipLoading ? (
+              <span
+                style={{
+                  display: "block",
+                  marginTop: "0.2rem",
+                  fontSize: "0.7rem",
+                  opacity: 0.8,
+                }}
+              >
+                Looking up meaning…
+              </span>
+            ) : tooltipDefinition ? (
+              <span
+                style={{
+                  display: "block",
+                  marginTop: "0.2rem",
+                  fontSize: "0.8rem",
+                  color: "#e5e7eb",
+                }}
+              >
+                {tooltipDefinition}
               </span>
             ) : null}
           </div>,
