@@ -1,17 +1,19 @@
-from googletrans import Translator
-import spacy
 import asyncio
-import re
 import json
-import joblib
-from jamo import h2j, j2hcj
+import os
+import re
 from collections.abc import AsyncIterator
-import pinyin
+
+import httpx
+import joblib
 import opencc
+import pinyin
+import spacy
+from jamo import h2j, j2hcj
 
 converter = opencc.OpenCC("t2s.json")
 
-translator = Translator()
+GOOGLE_TRANSLATE_URL = "https://translation.googleapis.com/language/translate/v2"
 nlp = spacy.load("en_core_web_sm")
 model = joblib.load("ml/loanword_model.pkl")
 
@@ -105,6 +107,27 @@ loanword_dict: dict[str, str] = {
     "프린터": "printer",
 }
 
+class TranslationError(Exception):
+    pass
+
+
+async def google_translate(text: str, src: str, dest: str) -> str:
+    """Translate via the official Google Cloud Translation API (v2)."""
+    api_key = os.getenv("GOOGLE_TRANSLATE_API_KEY")
+    if not api_key:
+        raise TranslationError("GOOGLE_TRANSLATE_API_KEY not set in environment")
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        res = await client.post(
+            GOOGLE_TRANSLATE_URL,
+            params={"key": api_key},
+            json={"q": text, "source": src, "target": dest, "format": "text"},
+        )
+    if res.status_code != 200:
+        raise TranslationError(f"Google Translate returned {res.status_code}: {res.text[:300]}")
+    return res.json()["data"]["translations"][0]["translatedText"]
+
+
 def simplified(hanja: str) -> str:
     return converter.convert(hanja)
 
@@ -113,8 +136,7 @@ def check_loanword(word: str) -> bool:
     return confidence > 0.6 # only accept with high confidence to prevent false positives (loanwords should be high confidence)
 
 async def translate_loanword(word: str) -> str:
-    result = await translator.translate(word, src="ko", dest="es")
-    return result.text
+    return await google_translate(word, src="ko", dest="es")
 
 async def get_pinyin(word: str) -> str:
     return pinyin.get(word)
@@ -123,8 +145,7 @@ async def get_pinyin(word: str) -> str:
 async def get_english_definition(word: str, kind: str = "ko") -> str:
     """Lookup a word's English meaning on demand for tooltips."""
     src = "zh-CN" if kind == "hanja" else "ko"
-    result = await translator.translate(word, src=src, dest="en")
-    return result.text
+    return await google_translate(word, src=src, dest="en")
 
 async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, str]]:
     """Stream translation as NDJSON-compatible dicts: each yield is {"message": segment}."""
@@ -136,8 +157,7 @@ async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, st
             names[placeholder] = ent.text
             english_text = english_text.replace(ent.text, placeholder)
 
-    result = await translator.translate(english_text, src="en", dest="ko")
-    korean_text = result.text
+    korean_text = await google_translate(english_text, src="en", dest="ko")
 
     for placeholder, name in names.items():
         korean_text = korean_text.replace(placeholder, name)

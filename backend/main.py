@@ -1,13 +1,15 @@
 import asyncio
 import json
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from util import translate_text_stream, get_english_definition
-from openai import OpenAI
-from dotenv import load_dotenv
 import os
 from enum import Enum
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from openai import OpenAI
+
+from util import TranslationError, get_english_definition, translate_text_stream
 
 load_dotenv()
 
@@ -43,10 +45,22 @@ async def root():
 
 @app.get("/translate/{text}")
 async def translate(text: str):
+    segments = translate_text_stream(text)
+    try:
+        first = await anext(segments)
+    except StopAsyncIteration:
+        first = None
+    except TranslationError as e:
+        print(f"[translate] {e}")
+        raise HTTPException(status_code=502, detail="Translation service failed")
+
     async def ndjson_stream():
-        async for obj in translate_text_stream(text):
-            yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+        if first is None:
+            return
+        yield (json.dumps(first, ensure_ascii=False) + "\n").encode("utf-8")
+        async for obj in segments:
             await asyncio.sleep(0.04)
+            yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
 
     return StreamingResponse(
         ndjson_stream(),
@@ -96,5 +110,9 @@ async def define(word: str, kind: str = "ko"):
 
     kind = "ko" for Korean, "hanja" for Chinese (simplified) input.
     """
-    definition = await get_english_definition(word, kind=kind)
+    try:
+        definition = await get_english_definition(word, kind=kind)
+    except TranslationError as e:
+        print(f"[define] {e}")
+        raise HTTPException(status_code=502, detail="Translation service failed")
     return {"definition": definition}
