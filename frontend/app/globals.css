@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0e0f16;
+  --foreground: #e5e7eb;
+  --nav-height: 64px;
 }
 
 @theme inline {
@@ -10,54 +11,156 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-display: var(--font-jakarta);
+  --font-korean: var(--font-noto-kr);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+::selection {
+  background: rgba(167, 139, 250, 0.35);
+  color: #fff;
+}
+
+/* ---------- Panels ---------- */
+
+.panel-input {
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(255, 255, 255, 0.04), transparent 60%),
+    linear-gradient(180deg, #2d3238 0%, #1e2226 100%);
+}
+
+.panel-output {
+  background:
+    radial-gradient(80% 50% at 100% 0%, rgba(244, 114, 182, 0.18), transparent 60%),
+    linear-gradient(135deg, #1e1b4b 0%, #312e81 35%, #4c1d95 70%, #831843 100%);
+}
+
+/* ---------- Navbar ---------- */
+
+.navbar {
+  height: var(--nav-height);
+  background: rgba(14, 15, 22, 0.62);
+  backdrop-filter: saturate(160%) blur(16px);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
+}
+
+.navbar::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.08) 45%,
+    rgba(167, 139, 250, 0.45) 75%,
+    rgba(244, 114, 182, 0.45) 100%
+  );
+}
+
+/* ---------- Form controls ---------- */
+
+.range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #a78bfa 0%,
+    #f472b6 var(--range-fill, 50%),
+    rgba(255, 255, 255, 0.12) var(--range-fill, 50%)
+  );
+  outline: none;
+  cursor: pointer;
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.25), 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: box-shadow 0.15s ease;
+}
+.range-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.25), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.range-input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px rgba(167, 139, 250, 0.4), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.collapse-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+.collapse-grid[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+
+/* ---------- Result tokens ---------- */
 
 .result-segment-with-pinyin {
   position: relative;
   display: inline-block;
 }
+
 .result-pinyin-tooltip {
-  padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.85);
+  padding: 8px 12px;
+  background: rgba(12, 12, 20, 0.92);
   color: #fff;
-  font-size: 0.75rem;
-  border-radius: 4px;
-  white-space: nowrap;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   text-align: center;
   pointer-events: none;
   width: max-content;
-  max-width: 12em;
+  max-width: min(18rem, 80vw);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 .result-pinyin-tooltip-portal {
   z-index: 9999;
-  visibility: visible;
-  opacity: 1;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: tooltip-in 0.16s ease-out;
+}
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    margin-top: 4px;
+  }
+  to {
+    opacity: 1;
+    margin-top: 0;
+  }
 }
 .result-tooltip-original {
   display: inline;
+  font-family: var(--font-noto-kr), sans-serif;
   font-weight: 500;
 }
 .result-tooltip-pinyin {
   display: inline;
-  opacity: 0.9;
+  opacity: 0.85;
 }
 .result-tooltip-original + .result-tooltip-pinyin::before {
   content: " · ";
-  opacity: 0.8;
+  opacity: 0.6;
 }
 
 .result-segment-stream-in {
@@ -98,4 +201,13 @@ body {
   text-shadow:
     0 0 3px rgba(248, 250, 252, 0.7),
     0 0 6px rgba(129, 140, 248, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
