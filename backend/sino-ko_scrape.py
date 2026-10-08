@@ -1,11 +1,16 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.options import Options
+"""Scrape Wiktionary's Sino-Korean category into sino-ko_dict.json.
+
+Saves simplified hanja. Re-running resumes from entries already in the file.
+Run from backend/.
+"""
+
 import json
 import time
-import re
+
 import opencc
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
 chrome_options = Options()
 chrome_options.add_argument("--headless")
@@ -26,7 +31,6 @@ except FileNotFoundError:
     kor_sino_dict = {}
 
 driver = webdriver.Chrome(options=chrome_options)
-# driver.get("https://en.wiktionary.org/w/index.php?title=Category:Sino-Korean_words")
 driver.get("https://en.wiktionary.org/w/index.php?title=Category:Sino-Korean_words&pagefrom=%EC%B2%9C%EC%A3%BC%EA%B5%90%0A%EC%B2%9C%EC%A3%BC%EA%B5%90#mw-pages")
 
 converter = opencc.OpenCC('t2s.json')
@@ -61,7 +65,7 @@ while True:
         if hangul[0].isdigit():
             continue
         if hangul in kor_sino_dict:
-            continue  #
+            continue
         driver.get(href)
         time.sleep(1)
         try:

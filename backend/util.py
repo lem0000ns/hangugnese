@@ -11,108 +11,77 @@ import pinyin
 import spacy
 from jamo import h2j, j2hcj
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 converter = opencc.OpenCC("t2s.json")
 
 GOOGLE_TRANSLATE_URL = "https://translation.googleapis.com/language/translate/v2"
 nlp = spacy.load("en_core_web_sm")
-model = joblib.load("ml/loanword_model.pkl")
+model = joblib.load(os.path.join(BASE_DIR, "ml", "loanword_model.pkl"))
 
-SINO_KO_PATH = "sino-ko_dict.json"
-hanja_dict = {}
-with open(SINO_KO_PATH, "r", encoding="utf-8") as f:
-    hanja_dict = json.load(f)
+# Chosen in ml/loanword_ml.ipynb: best F1 among cutoffs with precision of at least 0.85.
+LOANWORD_THRESHOLD = 0.5
 
-loanword_dict: dict[str, str] = {
-    "컴퓨터": "computer",
-    "인터넷": "internet",
-    "코드": "code",
-    "데이터": "data",
-    "서비스": "service",
-    "시스템": "system",
-    "프로그램": "program",
-    "프로젝트": "project",
-    "테스트": "test",
-    "모델": "model",
-    "이메일": "email",
-    "메일": "mail",
-    "앱": "app",
-    "어플": "app",
-    "파일": "file",
-    "폴더": "folder",
-    "서버": "server",
-    "클라이언트": "client",
-    "데이터베이스": "database",
-    "카메라": "camera",
-    "비디오": "video",
-    "사진": "photo",
-    "이미지": "image",
-    "뉴스": "news",
-    "채팅": "chatting",
-    "게임": "game",
-    "로그인": "login",
-    "로그아웃": "logout",
-    "패스워드": "password",
-    "비밀번호": "password",
-    "버튼": "button",
-    "링크": "link",
-    "페이지": "page",
-    "프로필": "profile",
-    "메시지": "message",
-    "메세지": "message",
-    "토큰": "token",
-    "아이디": "ID",
-    "계정": "account",
-    "옵션": "option",
-    "설정": "settings",
-    "업데이트": "update",
-    "버전": "version",
-    "라이브러리": "library",
-    "프레임워크": "framework",
-    "스튜디오": "studio",
-    "클래스": "class",
-    "오브젝트": "object",
-    "모듈": "module",
-    "메서드": "method",
-    "함수": "function",
-    "변수": "variable",
-    "커피": "coffee",
-    "콜라": "cola",
-    "주스": "juice",
-    "피자": "pizza",
-    "버거": "burger",
-    "샌드위치": "sandwich",
-    "초콜릿": "chocolate",
-    "케이크": "cake",
-    "샐러드": "salad",
-    "아이스크림": "ice cream",
-    "디저트": "dessert",
-    "마트": "mart",
-    "쇼핑": "shopping",
-    "세일": "sale",
-    "쿠폰": "coupon",
-    "티켓": "ticket",
-    "콘서트": "concert",
-    "뮤직": "music",
-    "노트북": "notebook",
-    "모니터": "monitor",
-    "키보드": "keyboard",
-    "마우스": "mouse",
-    "헤드폰": "headphone",
-    "이어폰": "earphone",
-    "스피커": "speaker",
-    "라디오": "radio",
-    "텔레비전": "television",
-    "에어컨": "air conditioner",
-    "리모컨": "remote control",
-    "프린터": "printer",
-}
+with open(os.path.join(BASE_DIR, "sino-ko_dict.json"), "r", encoding="utf-8") as f:
+    hanja_dict: dict[str, str] = json.load(f)
+
+# Longest first, so a compound particle is removed before the shorter one it ends with.
+PARTICLES = sorted(
+    [
+        "에서는", "에서도", "에서의", "에게서", "에게는", "에게도", "으로는", "으로도", "으로서", "으로써",
+        "까지는", "까지도", "부터는", "이라는", "이라고", "이라도",
+        "처럼", "라는", "라고", "에서", "에게", "한테", "으로", "로서", "로써", "까지", "부터", "보다",
+        "마다", "하고", "이나", "이랑", "조차", "마저", "밖에",
+        "과", "와", "을", "를", "은", "는", "이", "가", "의", "에", "도", "만", "로", "께", "랑", "나", "야",
+    ],
+    key=len,
+    reverse=True,
+)
+
+NAMED_ENTITY_LABELS = ("PERSON", "ORG", "GPE")
+
+
+def strip_particles(token: str) -> str:
+    """Drop non-hangul characters, one trailing particle, and a plural 들."""
+    word = re.sub(r"[^\uac00-\ud7a3]", "", token)
+    for particle in PARTICLES:
+        if word.endswith(particle) and len(word) > len(particle):
+            word = word[: -len(particle)]
+            break
+    if word.endswith("들") and len(word) > 1:
+        word = word[:-1]
+    return word
+
+
+def split_particles(token: str) -> tuple[str, str, str]:
+    """Split a token into leading characters, the stem, and the trailing particle or punctuation."""
+    stem = strip_particles(token)
+    start = token.find(stem) if stem else -1
+    if start < 0:
+        return "", token, ""
+    return token[:start], stem, token[start + len(stem):]
+
+
+def find_hanja(token: str) -> tuple[str, str, str] | None:
+    """Return (prefix, dictionary word, suffix) when the token is Sino-Korean.
+
+    Stems of one syllable are skipped. Short stems collide with unrelated entries
+    (함께 -> 함, 하는 -> 하).
+    """
+    if token in hanja_dict:
+        return "", token, ""
+    prefix, stem, suffix = split_particles(token)
+    if len(stem) >= 2 and stem in hanja_dict:
+        return prefix, stem, suffix
+    return None
+
 
 class TranslationError(Exception):
-    pass
+    """The translation provider failed or is not configured."""
 
 
 async def google_translate(text: str, src: str, dest: str) -> str:
-    """Translate via the official Google Cloud Translation API (v2)."""
+    """Translate text with the Google Cloud Translation API (v2)."""
     api_key = os.getenv("GOOGLE_TRANSLATE_API_KEY")
     if not api_key:
         raise TranslationError("GOOGLE_TRANSLATE_API_KEY not set in environment")
@@ -129,67 +98,102 @@ async def google_translate(text: str, src: str, dest: str) -> str:
 
 
 def simplified(hanja: str) -> str:
+    """Convert traditional hanja to simplified Chinese."""
     return converter.convert(hanja)
 
+
+def loanword_confidence(word: str) -> float:
+    """Probability that the particle-stripped word is a Western loanword."""
+    stem = strip_particles(word)
+    if not stem:
+        return 0.0
+    return model.predict_proba([j2hcj(h2j(stem))])[0][1]
+
+
 def check_loanword(word: str) -> bool:
-    confidence = model.predict_proba([j2hcj(h2j(word))])[0][1]
-    return confidence > 0.6 # only accept with high confidence to prevent false positives (loanwords should be high confidence)
+    """True when loanword confidence is above LOANWORD_THRESHOLD."""
+    return bool(loanword_confidence(word) > LOANWORD_THRESHOLD)
+
 
 async def translate_loanword(word: str) -> str:
+    """Spanish rendering of a Korean loanword, shown in place of the hangul."""
     return await google_translate(word, src="ko", dest="es")
 
-async def get_pinyin(word: str) -> str:
+
+def get_pinyin(word: str) -> str:
+    """Mandarin pinyin for a simplified hanja string."""
     return pinyin.get(word)
 
 
 async def get_english_definition(word: str, kind: str = "ko") -> str:
-    """Lookup a word's English meaning on demand for tooltips."""
+    """English meaning of a Korean word, or of simplified Chinese when kind is 'hanja'."""
     src = "zh-CN" if kind == "hanja" else "ko"
     return await google_translate(word, src=src, dest="en")
 
-async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, str]]:
-    """Stream translation as NDJSON-compatible dicts: each yield is {"message": segment}."""
+
+def hold_named_entities(english_text: str) -> tuple[str, dict[str, str]]:
+    """Replace person, organization, and place names with placeholders."""
     names: dict[str, str] = {}
-    doc = await asyncio.to_thread(nlp, english_text)
+    doc = nlp(english_text)
     for i, ent in enumerate(doc.ents):
-        if ent.label_ in ["PERSON", "ORG", "GPE"]:
+        if ent.label_ in NAMED_ENTITY_LABELS:
             placeholder = f"<NAME{i}>"
             names[placeholder] = ent.text
             english_text = english_text.replace(ent.text, placeholder)
+    return english_text, names
 
-    korean_text = await google_translate(english_text, src="en", dest="ko")
 
+def restore_named_entities(text: str, names: dict[str, str]) -> str:
+    """Put the original names back in place of their placeholders."""
     for placeholder, name in names.items():
-        korean_text = korean_text.replace(placeholder, name)
+        text = text.replace(placeholder, name)
+    return text
 
-    # Simple regex tokenizer: contiguous non-space runs, keep gaps as-is.
+
+async def annotate_token(surface: str) -> dict[str, str]:
+    """Classify one Korean token as hanja, a loanword, or plain text."""
+    hanja_match = find_hanja(surface)
+    if hanja_match:
+        prefix, word, suffix = hanja_match
+        hanja = simplified(hanja_dict[word])
+        return {
+            "message": hanja,
+            "pinyin": get_pinyin(hanja),
+            "original": surface,
+            "prefix": prefix,
+            "suffix": suffix,
+        }
+
+    if check_loanword(surface):
+        prefix, stem, suffix = split_particles(surface)
+        translated = await translate_loanword(stem)
+        return {
+            "message": translated.upper(),
+            "pinyin": "",
+            "original": surface,
+            "prefix": prefix,
+            "suffix": suffix,
+        }
+
+    return {"message": surface, "pinyin": "", "original": ""}
+
+
+async def translate_text_stream(english_text: str) -> AsyncIterator[dict[str, str]]:
+    """Yield translation segments as they are classified.
+
+    Each item has message, pinyin, and original. Hanja and loanword items also
+    include prefix and suffix, so particles and punctuation stay unhighlighted.
+    """
+    english_text, names = await asyncio.to_thread(hold_named_entities, english_text)
+    korean_text = await google_translate(english_text, src="en", dest="ko")
+    korean_text = restore_named_entities(korean_text, names)
+
     idx = 0
-    for m in re.finditer(r"\S+", korean_text):
-        start, end = m.span()
-        surface = m.group(0)
-
+    for match in re.finditer(r"\S+", korean_text):
+        start, end = match.span()
         if start > idx:
-            # gap (spaces / punctuation) before this token
             yield {"message": korean_text[idx:start], "pinyin": "", "original": ""}
-
-        segment = surface
-        is_hanja = is_loanword = False
-
-        if surface in hanja_dict:
-            is_hanja = True
-            segment = simplified(hanja_dict[surface])
-        elif check_loanword(surface):
-            is_loanword = True
-            segment = await translate_loanword(surface)
-
-        if is_hanja:
-            pinyin_text = await get_pinyin(segment)
-            yield {"message": segment, "pinyin": pinyin_text, "original": surface}
-        elif is_loanword:
-            yield {"message": segment.upper(), "pinyin": "", "original": surface}
-        else:
-            yield {"message": segment, "pinyin": "", "original": ""}
-
+        yield await annotate_token(match.group(0))
         idx = end
 
     if idx < len(korean_text):

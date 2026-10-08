@@ -1,16 +1,20 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.options import Options
+"""Append Korean loanwords from Wiktionary to dictionary_words.csv.
+
+Skips words already in the file. Every appended row is labeled 1. Run from backend/ml.
+"""
+
 import csv
 import time
-import re
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--disable-gpu")
 
-CSV_PATH = "korean_loanwords.csv"
+CSV_PATH = "dictionary_words.csv"
 
 def load_existing_words() -> set[str]:
     try:
@@ -36,7 +40,6 @@ loanwords: list[str] = []
 driver = webdriver.Chrome(options=chrome_options)
 driver.get("https://en.wiktionary.org/w/index.php?title=Category:Korean_terms_borrowed_from_English&pagefrom=%EB%8B%A4%ED%81%AC%EC%84%9C%ED%81%B4%0A%EB%8B%A4%ED%81%AC%EC%84%9C%ED%81%B4#mw-pages")
 
-words = 0
 while True:
     category_url = driver.current_url
 
@@ -54,7 +57,6 @@ while True:
                 continue
             print(hangul)
             loanwords.append(hangul)
-            words += 1
 
     driver.get(category_url)
     time.sleep(1)

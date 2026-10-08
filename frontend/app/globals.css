@@ -203,6 +203,11 @@ body {
     0 0 6px rgba(129, 140, 248, 0.6);
 }
 
+.result-hoverable-token:hover > .result-segment-hanja,
+.result-hoverable-token:hover > .result-segment-loanword {
+  text-shadow: inherit;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-from enum import Enum
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -9,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 
+from generation import PASSAGE_MAX_TOKENS, passage_instructions
 from util import TranslationError, get_english_definition, translate_text_stream
 
 load_dotenv()
@@ -33,18 +33,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class Verbosity(Enum):
-    LOW = 1   # modest
-    MEDIUM = 2  # adequate
-    HIGH = 3   # rich
+
+def ndjson_line(obj: dict) -> bytes:
+    """Encode one JSON object as a newline-delimited UTF-8 line."""
+    return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    """Health check. The frontend calls this on load to wake a sleeping host."""
+    return {"status": "ok"}
 
 
 @app.get("/translate/{text}")
 async def translate(text: str):
+    """Stream the Korean translation as newline-delimited JSON.
+
+    The first segment is awaited here so a translation failure becomes an HTTP
+    error instead of a broken stream.
+    """
     segments = translate_text_stream(text)
     try:
         first = await anext(segments)
@@ -57,18 +64,17 @@ async def translate(text: str):
     async def ndjson_stream():
         if first is None:
             return
-        yield (json.dumps(first, ensure_ascii=False) + "\n").encode("utf-8")
+        yield ndjson_line(first)
         async for obj in segments:
+            # Short pause so the client can paint each token as it arrives.
             await asyncio.sleep(0.04)
-            yield (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+            yield ndjson_line(obj)
 
     return StreamingResponse(
         ndjson_stream(),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-store"},
     )
-
-VERBOSITY_MAP = {"modest": Verbosity.LOW, "adequate": Verbosity.MEDIUM, "rich": Verbosity.HIGH}
 
 
 @app.get("/generate")
@@ -77,28 +83,19 @@ async def generate(
     temperature: float = 0.7,
     verbosity: str = "adequate",
 ):
-    vb = VERBOSITY_MAP.get(verbosity, Verbosity.MEDIUM)
-    max_tokens = 400
-    max_sentences = 6
-    vocab_description = "at a very sophisticated and advanced level; use your imagination"
-
-    if vb == Verbosity.LOW:
-        max_sentences = 2
-        vocab_description = "relatively simple and easy to understand for a very beginner's children book level"
-    elif vb == Verbosity.MEDIUM:
-        max_sentences = 4
-        vocab_description = "level appropriate for a high school student"
-
-    system_prompt = f"Generate about {max_sentences} sentences about the given topic. Keep the vocabulary {vocab_description}. Do not include line breaks. If the topic is inappropriate, generate about {max_sentences} sentences about the dangers of the topic."
+    """Draft an English passage about a topic at the requested verbosity and temperature."""
     if prompt is None:
         prompt = "Anything you want."
 
     response = await asyncio.to_thread(
         client.chat.completions.create,
         model="gpt-4o-mini",
-        messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": "Topic: " + prompt}],
+        messages=[
+            {"role": "system", "content": passage_instructions(verbosity, guard_inappropriate=True)},
+            {"role": "user", "content": "Topic: " + prompt},
+        ],
         temperature=max(0.1, min(1.0, temperature)),
-        max_tokens=max_tokens,
+        max_tokens=PASSAGE_MAX_TOKENS,
     )
     text = response.choices[0].message.content or ""
     return {"text": text}
@@ -106,10 +103,7 @@ async def generate(
 
 @app.get("/define")
 async def define(word: str, kind: str = "ko"):
-    """Return an on-demand English definition for a token.
-
-    kind = "ko" for Korean, "hanja" for Chinese (simplified) input.
-    """
+    """English definition for a Korean word, or for simplified Chinese when kind is 'hanja'."""
     try:
         definition = await get_english_definition(word, kind=kind)
     except TranslationError as e:

@@ -10,8 +10,21 @@ import {
   useState,
 } from "react";
 
-type Segment = { message: string; pinyin: string; original: string };
-type HelloResponse = { message: string; pinyin?: string; original?: string };
+type Segment = {
+  message: string;
+  pinyin: string;
+  original: string;
+  prefix: string;
+  suffix: string;
+};
+
+type ApiSegment = {
+  message?: string;
+  pinyin?: string;
+  original?: string;
+  prefix?: string;
+  suffix?: string;
+};
 
 type TooltipState = { index: number; left: number; top: number } | null;
 
@@ -20,11 +33,53 @@ type VerbosityLevel = "modest" | "adequate" | "rich";
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "https://hangugnese.onrender.com";
 
-const toSegment = (data: HelloResponse): Segment => ({
-  message: data.message,
-  pinyin: data.pinyin ?? "",
-  original: data.original ?? "",
-});
+function toSegment(data: ApiSegment): Segment | null {
+  if (data.message == null) return null;
+  return {
+    message: data.message,
+    pinyin: data.pinyin ?? "",
+    original: data.original ?? "",
+    prefix: data.prefix ?? "",
+    suffix: data.suffix ?? "",
+  };
+}
+
+// Read newline-delimited JSON, or one JSON object when the body is not a stream.
+async function readNdjson(
+  res: Response,
+  onSegment: (segment: Segment) => Promise<void>,
+) {
+  const reader = res.body?.getReader();
+  if (!reader) {
+    const segment = toSegment((await res.json()) as ApiSegment);
+    if (segment) await onSegment(segment);
+    return;
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const consume = async (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    try {
+      const segment = toSegment(JSON.parse(trimmed) as ApiSegment);
+      if (segment) await onSegment(segment);
+    } catch {
+      // Ignore a truncated or malformed line.
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) await consume(line);
+  }
+  if (buffer) await consume(buffer);
+}
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -42,6 +97,11 @@ export default function Home() {
     null,
   );
   const [tooltipLoading, setTooltipLoading] = useState(false);
+
+  useEffect(() => {
+    // Wake the API host before the user submits, so a sleeping server can boot while they type.
+    fetch(`${API_BASE}/`, { cache: "no-store" }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -77,45 +137,10 @@ export default function Home() {
         return;
       }
 
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      if (reader) {
-        while (true) {
-          const { done, value: chunk } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(chunk, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            try {
-              const data = JSON.parse(trimmed) as HelloResponse;
-              if (data.message != null) {
-                setResult((prev) => [...prev, toSegment(data)]);
-                await new Promise((r) => setTimeout(r, 0));
-              }
-            } catch {
-              // skip malformed line
-            }
-          }
-        }
-        if (buffer.trim()) {
-          try {
-            const data = JSON.parse(buffer.trim()) as HelloResponse;
-            if (data.message != null) {
-              setResult((prev) => [...prev, toSegment(data)]);
-            }
-          } catch {
-            // skip
-          }
-        }
-      } else {
-        const data = (await res.json()) as HelloResponse;
-        setResult(data.message != null ? [toSegment(data)] : []);
-      }
+      await readNdjson(res, async (segment) => {
+        setResult((prev) => [...prev, segment]);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
     } catch {
       setError("Could not reach backend");
     } finally {
@@ -169,7 +194,7 @@ export default function Home() {
       const data = (await res.json()) as { definition?: string };
       if (data.definition) setTooltipDefinition(data.definition);
     } catch {
-      // ignore errors for tooltip lookup
+      // A failed lookup leaves the tooltip without a definition.
     } finally {
       setTooltipLoading(false);
     }
@@ -484,7 +509,7 @@ export default function Home() {
                       return hasTooltip ? (
                         <span
                           key={i}
-                          className={`result-segment-with-pinyin result-segment-stream-in result-hoverable-token ${auraClass}`.trim()}
+                          className="result-segment-with-pinyin result-segment-stream-in result-hoverable-token"
                           onMouseEnter={(e) => {
                             showTooltipAt(i, e.currentTarget);
                             setTooltipDefinition(null);
@@ -499,7 +524,9 @@ export default function Home() {
                               : undefined
                           }
                         >
-                          {seg.message}
+                          {seg.prefix}
+                          <span className={auraClass}>{seg.message}</span>
+                          {seg.suffix}
                         </span>
                       ) : (
                         <span
